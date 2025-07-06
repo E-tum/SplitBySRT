@@ -4,6 +4,8 @@
 -- - Supports speaker separation (e.g., （A）Hello!)
 -- - Handles overlapping lines
 -- - Uses external config.ini for newline replacement
+-- - Default path for file dialog is project path
+-- - Speaker tracks are ordered by first appearance
 
 local reaper = reaper
 
@@ -54,7 +56,7 @@ local function parse_srt(file_path)
     local content = f:read("*all")
     f:close()
 
-    -- BOMを除去
+    -- Remove UTF-8 BOM
     if content:sub(1, 3) == "\239\187\191" then
         content = content:sub(4)
     end
@@ -113,20 +115,6 @@ local function clean_text(text)
 end
 
 -------------------------
--- Diagnostic: Byte Dump
--------------------------
-local function debug_text_bytes(label, text)
-    reaper.ShowConsoleMsg("==== " .. label .. " ====\n")
-    reaper.ShowConsoleMsg("表示: " .. text .. "\n")
-    reaper.ShowConsoleMsg("バイト列: ")
-    for i = 1, #text do
-        local byte = text:byte(i)
-        reaper.ShowConsoleMsg(string.format("%02X ", byte))
-    end
-    reaper.ShowConsoleMsg("\n\n")
-end
-
--------------------------
 -- Detect and strip speaker name from text (UTF-8 aware)
 -------------------------
 local function strip_speaker_utf8(text)
@@ -150,46 +138,6 @@ local function strip_speaker_utf8(text)
     return speaker and speaker ~= "" and speaker or nil, content
 end
 
--- 括弧で始まるテキストから speaker と content を分離
-local function strip_speaker_utf82(text)
-    if type(text) ~= "string" or not utf8.len(text) then
-        return nil, text
-    end
-
-    local brackets = {
-        ["（"] = "）",
-        ["["]  = "]",
-    }
-
-    -- UTF-8で文字単位に変換
-    local chars = {}
-    for _, cp in utf8.codes(text) do
-        table.insert(chars, utf8.char(cp))
-    end
-
-    -- 空白をスキップ
-    local i = 1
-    while chars[i] and chars[i]:match("^%s$") do
-        i = i + 1
-    end
-
-    local open = chars[i]
-    local close = brackets[open]
-    if not close then return nil, text end
-
-    -- 閉じ括弧を探す
-    local j = i + 1
-    while chars[j] and chars[j] ~= close do
-        j = j + 1
-    end
-    if not chars[j] then return nil, text end
-
-    -- speaker と content に分離
-    local speaker = table.concat(chars, "", i + 1, j - 1)
-    local content = table.concat(chars, "", j + 1)
-
-    return speaker ~= "" and speaker or nil, content:gsub("^%s*", "")
-end
 
 -------------------------
 -- Copy and trim item for a subtitle entry
@@ -225,7 +173,7 @@ local function main()
     local padding_end = config.padding_end or 0.0
 
     local selected_count = reaper.CountSelectedMediaItems(0)
-    if selected_count == 0 then reaper.MB(msg.no_item, "エラー", 0) return end
+    if selected_count == 0 then reaper.MB(msg.no_item, "Error", 0) return end
 
     local item_list = {}
     for i = 0, selected_count - 1 do
@@ -233,11 +181,11 @@ local function main()
     end
 
     local track = reaper.GetMediaItem_Track(item_list[1])
-    if not track then reaper.MB(msg.track_err, "エラー", 0) return end
+    if not track then reaper.MB(msg.track_err, "Error", 0) return end
 
     for _, item in ipairs(item_list) do
         if reaper.GetMediaItem_Track(item) ~= track then
-            reaper.MB(msg.multi_track, "エラー", 0)
+            reaper.MB(msg.multi_track, "Error", 0)
             return
         end
     end
@@ -248,7 +196,7 @@ local function main()
 
     local subtitles, err = parse_srt(srt_path)
     if not subtitles then
-        reaper.MB(msg.srt_err .. err, "エラー", 0)
+        reaper.MB(msg.srt_err .. err, "Error", 0)
         return
     end
 
@@ -300,7 +248,7 @@ local function main()
             end
         end
         if not matched then
-            reaper.MB(msg.no_match(entry.index), "エラー", 0)
+            reaper.MB(msg.no_match(entry.index), "Error", 0)
             return
         end
 
