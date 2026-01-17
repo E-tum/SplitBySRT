@@ -118,27 +118,58 @@ end
 -- Detect and strip speaker name from text (UTF-8 aware)
 -------------------------
 local function strip_speaker_utf8(text)
-    if type(text) ~= "string" or not utf8.len(text) then
+    if type(text) ~= "string" then
+        return nil, ""
+    end
+    if not utf8.len(text) then
         return nil, text
     end
-    local brackets = { ["（"] = "）", ["["] = "]" }
-    local first_char = ""
-    for _, codepoint in utf8.codes(text) do
-        first_char = utf8.char(codepoint)
-        break
+
+    local brackets = {
+        ["（"] = "）",
+        ["["]  = "]",
+    }
+
+    local chars = {}
+    for _, cp in utf8.codes(text) do
+        chars[#chars + 1] = utf8.char(cp)
     end
-    local close_bracket = brackets[first_char]
-    if not close_bracket then return nil, text end
-    local _, bracket_end = text:find("^" .. first_char .. "([^" .. close_bracket .. "]*)" .. close_bracket)
-    if not bracket_end then return nil, text end
-    local speaker = text:match("^" .. first_char .. "([^" .. close_bracket .. "]*)" .. close_bracket)
-    local prefix = text:sub(1, bracket_end)
-    local content_start = utf8.offset(text, utf8.len(prefix) + 1)
-    local content = content_start and text:sub(content_start):gsub("^%s*", "") or ""
+
+    -- Skip leading whitespace (ASCII/Unicode spaces that match %s)
+    local i = 1
+    while chars[i] and chars[i]:match("^%s$") do
+        i = i + 1
+    end
+
+    local open = chars[i]
+    local close = brackets[open]
+    if not close then
+        return nil, text
+    end
+
+    -- Find closing bracket
+    local j = i + 1
+    while chars[j] and chars[j] ~= close do
+        j = j + 1
+    end
+    if not chars[j] then
+        return nil, text
+    end
+
+    local speaker = table.concat(chars, "", i + 1, j - 1)
+    local content = table.concat(chars, "", j + 1)
+
+    content = content:gsub("^%s*", "")
+
     if content == "" then
         return nil, text
     end
-    return speaker and speaker ~= "" and speaker or nil, content
+
+    if speaker == "" then
+        return nil, content
+    end
+
+    return speaker, content
 end
 
 
