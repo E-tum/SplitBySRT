@@ -135,6 +135,9 @@ local function strip_speaker_utf8(text)
     local prefix = text:sub(1, bracket_end)
     local content_start = utf8.offset(text, utf8.len(prefix) + 1)
     local content = content_start and text:sub(content_start):gsub("^%s*", "") or ""
+    if content == "" then
+        return nil, text
+    end
     return speaker and speaker ~= "" and speaker or nil, content
 end
 
