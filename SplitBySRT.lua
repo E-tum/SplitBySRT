@@ -261,6 +261,8 @@ local function main()
     insert_idx = insert_idx + 1
 
     for _, entry in ipairs(subtitles) do
+        local srt_start = math.max(0, entry.start_time - padding_start)
+        local srt_end   = entry.end_time + padding_end
         local start_time = math.max(0, entry.start_time - padding_start)
         local end_time = entry.end_time + padding_end
         local raw_text = clean_text(entry.text)
@@ -272,6 +274,9 @@ local function main()
         for _, item in ipairs(item_list) do
             local item_start = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
             local item_end = item_start + reaper.GetMediaItemInfo_Value(item, "D_LENGTH")
+
+            local start_time = item_start + srt_start
+            local end_time   = item_start + srt_end
             if start_time >= item_start and end_time <= item_end then
                 local new_item, new_take = copy_and_trim(item, start_time, end_time, dest_track)
                 if new_take then
